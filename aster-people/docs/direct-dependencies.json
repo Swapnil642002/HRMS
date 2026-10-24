@@ -1,0 +1,186 @@
+{
+  "reviewedAt": "2026-10-23T11:30:09.598Z",
+  "basis": "Published package license declarations; permissive licenses allow private use and distribution subject to notices. Full installed-tree notice inventory is generated separately.",
+  "packages": [
+    {
+      "name": "next",
+      "version": "16.4.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/next/16.4.2"
+    },
+    {
+      "name": "react",
+      "version": "19.3.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/react/19.3.1"
+    },
+    {
+      "name": "react-dom",
+      "version": "19.3.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/react-dom/19.3.1"
+    },
+    {
+      "name": "@nestjs/common",
+      "version": "11.2.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40nestjs%2Fcommon/11.2.7"
+    },
+    {
+      "name": "@nestjs/core",
+      "version": "11.2.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40nestjs%2Fcore/11.2.7"
+    },
+    {
+      "name": "@nestjs/platform-express",
+      "version": "11.2.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40nestjs%2Fplatform-express/11.2.7"
+    },
+    {
+      "name": "@prisma/client",
+      "version": "6.19.3",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/%40prisma%2Fclient/6.19.3"
+    },
+    {
+      "name": "prisma",
+      "version": "6.19.3",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/prisma/6.19.3"
+    },
+    {
+      "name": "reflect-metadata",
+      "version": "0.2.2",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/reflect-metadata/0.2.2"
+    },
+    {
+      "name": "rxjs",
+      "version": "7.8.2",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/rxjs/7.8.2"
+    },
+    {
+      "name": "zod",
+      "version": "4.6.7",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/zod/4.6.7"
+    },
+    {
+      "name": "helmet",
+      "version": "8.3.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/helmet/8.3.0"
+    },
+    {
+      "name": "bullmq",
+      "version": "5.81.5",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/bullmq/5.81.5"
+    },
+    {
+      "name": "ioredis",
+      "version": "5.11.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/ioredis/5.11.1"
+    },
+    {
+      "name": "nodemailer",
+      "version": "10.2.1",
+      "license": "MIT-0",
+      "source": "https://registry.npmjs.org/nodemailer/10.2.1"
+    },
+    {
+      "name": "deepmerge-ts",
+      "version": "8.0.2",
+      "license": "BSD-3-Clause",
+      "source": "https://registry.npmjs.org/deepmerge-ts/8.0.2"
+    },
+    {
+      "name": "pdf-lib",
+      "version": "1.17.1",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/pdf-lib/1.17.1"
+    },
+    {
+      "name": "@aws-sdk/client-s3",
+      "version": "3.1156.0",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/%40aws-sdk%2Fclient-s3/3.1156.0"
+    },
+    {
+      "name": "@aws-sdk/s3-request-presigner",
+      "version": "3.1156.0",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/%40aws-sdk%2Fs3-request-presigner/3.1156.0"
+    },
+    {
+      "name": "typescript",
+      "version": "5.9.3",
+      "license": "Apache-2.0",
+      "source": "https://registry.npmjs.org/typescript/5.9.3"
+    },
+    {
+      "name": "tsx",
+      "version": "4.23.15",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/tsx/4.23.15"
+    },
+    {
+      "name": "@types/node",
+      "version": "24.19.2",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40types%2Fnode/24.19.2"
+    },
+    {
+      "name": "@types/react",
+      "version": "19.3.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40types%2Freact/19.3.0"
+    },
+    {
+      "name": "@types/react-dom",
+      "version": "19.3.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40types%2Freact-dom/19.3.0"
+    },
+    {
+      "name": "@types/express",
+      "version": "5.0.6",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40types%2Fexpress/5.0.6"
+    },
+    {
+      "name": "@types/nodemailer",
+      "version": "7.0.12",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40types%2Fnodemailer/7.0.12"
+    },
+    {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/tailwindcss/4.3.3"
+    },
+    {
+      "name": "@tailwindcss/postcss",
+      "version": "4.3.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/%40tailwindcss%2Fpostcss/4.3.3"
+    },
+    {
+      "name": "@simplewebauthn/server",
+      "version": "14.0.3",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@simplewebauthn%2Fserver/14.0.3"
+    },
+    {
+      "name": "@simplewebauthn/browser",
+      "version": "14.0.0",
+      "license": "MIT",
+      "source": "https://registry.npmjs.org/@simplewebauthn%2Fbrowser/14.0.0"
+    }
+  ]
+}

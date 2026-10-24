@@ -1,0 +1,375 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url = env("DATABASE_URL")
+}
+enum Role {
+  ADMIN
+  HR
+  FINANCE
+  MANAGER
+  EMPLOYEE
+}
+enum RequestKind {
+  LEAVE
+  TRAVEL
+  EXPENSE
+  ADVANCE
+  LOAN
+}
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+model Company {
+  id String @id @default(cuid())
+  name String
+  timezone String @default("Asia/Kolkata")
+  createdAt DateTime @default(now())
+  memberships Membership[]
+  employees Employee[]
+  requests WorkRequest[]
+  attendance Attendance[]
+  payrolls PayrollRun[]
+  policies PayrollPolicy[]
+  positions Position[]
+  candidates Candidate[]
+  reviews Review[]
+  tasks OnboardingTask[]
+  audits Audit[]
+  devices Device[]
+  files StoredFile[]
+  accessRequests AccessRequest[]
+  branches Branch[]
+}
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  name String
+  passwordHash String
+  active Boolean @default(true)
+  passwordSet Boolean @default(true)
+  passwordTokens PasswordToken[]
+  memberships Membership[]
+  sessions Session[]
+}
+model Membership {
+  id String @id @default(cuid())
+  userId String
+  companyId String
+  role Role
+  user User @relation(fields:[userId],references:[id])
+  company Company @relation(fields:[companyId],references:[id])
+  employee Employee? @relation("EmployeeAccount")
+  directReports Employee[] @relation("ReportingManager")
+  managedRequests WorkRequest[] @relation("RequestManager")
+  @@unique([userId,companyId])
+  @@unique([companyId,id])
+}
+model Session {
+  id String @id
+  userId String
+  expiresAt DateTime
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([expiresAt])
+}
+model Employee {
+  id String @id @default(cuid())
+  companyId String
+  membershipId String? @unique
+  code String
+  name String
+  email String
+  department String
+  designation String
+  joinedOn DateTime @db.Date
+  active Boolean @default(true)
+  monthlyBasic Int
+  monthlyAllowance Int @default(0)
+  monthlyTds Int @default(0)
+  pfEnabled Boolean @default(true)
+  esicEnabled Boolean @default(false)
+  leaveAllowance Int @default(24)
+  branchId String?
+  branch Branch? @relation(fields:[companyId,branchId],references:[companyId,id])
+  attendanceCredentials AttendanceCredential[]
+  company Company @relation(fields:[companyId],references:[id])
+  membership Membership? @relation("EmployeeAccount",fields:[membershipId],references:[id])
+  reportingManagerId String?
+  reportingManager Membership? @relation("ReportingManager",fields:[companyId,reportingManagerId],references:[companyId,id])
+  requests WorkRequest[]
+  attendance Attendance[]
+  payrollLines PayrollLine[]
+  reviews Review[]
+  tasks OnboardingTask[]
+  @@unique([companyId,code])
+  @@unique([companyId,email])
+  @@unique([companyId,id])
+}
+model WorkRequest {
+  id String @id @default(cuid())
+  companyId String
+  employeeId String
+  kind RequestKind
+  title String
+  details Json
+  amount Int @default(0)
+  status RequestStatus @default(PENDING)
+  approvalStep Int @default(0)
+  approvalRoles Role[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  company Company @relation(fields:[companyId],references:[id])
+  employee Employee @relation(fields:[companyId,employeeId],references:[companyId,id])
+  managerId String?
+  manager Membership? @relation("RequestManager",fields:[companyId,managerId],references:[companyId,id])
+  decisions ApprovalDecision[]
+  @@index([companyId,status])
+}
+model ApprovalDecision {
+  id String @id @default(cuid())
+  requestId String
+  actorId String
+  step Int
+  decision String
+  note String
+  createdAt DateTime @default(now())
+  request WorkRequest @relation(fields:[requestId],references:[id])
+  @@unique([requestId,step])
+}
+model Attendance {
+  id String @id @default(cuid())
+  companyId String
+  employeeId String
+  day DateTime @db.Date
+  checkIn DateTime
+  checkOut DateTime?
+  source String @default("SELF")
+  company Company @relation(fields:[companyId],references:[id])
+  employee Employee @relation(fields:[companyId,employeeId],references:[companyId,id])
+  @@unique([companyId,employeeId,day])
+}
+model Device {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  secretHash String
+  active Boolean @default(true)
+  company Company @relation(fields:[companyId],references:[id])
+  events DeviceEvent[]
+}
+model DeviceEvent {
+  id String @id @default(cuid())
+  deviceId String
+  externalId String
+  receivedAt DateTime @default(now())
+  device Device @relation(fields:[deviceId],references:[id])
+  @@unique([deviceId,externalId])
+}
+model PayrollPolicy {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  effectiveFrom DateTime @db.Date
+  pfEmployeeBps Int
+  pfEmployerBps Int
+  pfCeiling Int
+  esicEmployeeBps Int
+  esicEmployerBps Int
+  esicCeiling Int
+  professionalTax Int @default(0)
+  approvedBy String
+  approvedAt DateTime @default(now())
+  company Company @relation(fields:[companyId],references:[id])
+  runs PayrollRun[]
+}
+model PayrollRun {
+  id String @id @default(cuid())
+  companyId String
+  month String
+  status String @default("DRAFT")
+  policyId String
+  createdBy String
+  finalizedBy String?
+  createdAt DateTime @default(now())
+  company Company @relation(fields:[companyId],references:[id])
+  policy PayrollPolicy @relation(fields:[policyId],references:[id])
+  lines PayrollLine[]
+  @@unique([companyId,month])
+}
+model PayrollLine {
+  id String @id @default(cuid())
+  runId String
+  employeeId String
+  basic Int
+  allowance Int
+  pfEmployee Int
+  pfEmployer Int
+  esicEmployee Int
+  esicEmployer Int
+  tds Int
+  professionalTax Int
+  net Int
+  run PayrollRun @relation(fields:[runId],references:[id])
+  employee Employee @relation(fields:[employeeId],references:[id])
+  @@unique([runId,employeeId])
+}
+model Position {
+  id String @id @default(cuid())
+  companyId String
+  title String
+  department String
+  openings Int
+  status String @default("OPEN")
+  company Company @relation(fields:[companyId],references:[id])
+  candidates Candidate[]
+  @@unique([companyId,id])
+}
+model Candidate {
+  id String @id @default(cuid())
+  companyId String
+  positionId String
+  name String
+  email String
+  stage String @default("APPLIED")
+  company Company @relation(fields:[companyId],references:[id])
+  position Position @relation(fields:[companyId,positionId],references:[companyId,id])
+}
+model OnboardingTask {
+  id String @id @default(cuid())
+  companyId String
+  employeeId String
+  title String
+  dueOn DateTime @db.Date
+  completedAt DateTime?
+  company Company @relation(fields:[companyId],references:[id])
+  employee Employee @relation(fields:[companyId,employeeId],references:[companyId,id])
+}
+model Review {
+  id String @id @default(cuid())
+  companyId String
+  employeeId String
+  cycle String
+  goals String
+  feedback String @default("")
+  rating Int?
+  status String @default("OPEN")
+  company Company @relation(fields:[companyId],references:[id])
+  employee Employee @relation(fields:[companyId,employeeId],references:[companyId,id])
+  @@unique([companyId,employeeId,cycle])
+}
+model Audit {
+  id String @id @default(cuid())
+  companyId String
+  actorId String
+  action String
+  entityId String
+  createdAt DateTime @default(now())
+  company Company @relation(fields:[companyId],references:[id])
+  @@index([companyId,createdAt])
+}
+model Outbox {
+  id String @id @default(cuid())
+  recipient String
+  subject String
+  body String
+  sentAt DateTime?
+  createdAt DateTime @default(now())
+}
+model StoredFile {
+  id String @id @default(cuid())
+  companyId String
+  ownerId String
+  name String
+  key String @unique
+  contentType String
+  company Company @relation(fields:[companyId],references:[id])
+}
+
+model PasswordToken {
+  id String @id
+  userId String
+  expiresAt DateTime
+  usedAt DateTime?
+  user User @relation(fields:[userId], references:[id], onDelete:Cascade)
+  @@index([userId])
+}
+model AccessRequest {
+  id String @id @default(cuid())
+  companyId String
+  email String
+  name String
+  employeeCode String
+  status String @default("PENDING")
+  reviewNote String @default("")
+  reviewedBy String?
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  company Company @relation(fields:[companyId], references:[id])
+  @@unique([companyId,email])
+  @@index([companyId,status])
+}
+
+model Branch {
+  id String @id @default(cuid())
+  companyId String
+  name String
+  city String
+  latitude Float
+  longitude Float
+  radiusMetres Int @default(50)
+  maxAccuracyMetres Int @default(25)
+  active Boolean @default(true)
+  company Company @relation(fields:[companyId],references:[id])
+  employees Employee[]
+  @@unique([companyId,id])
+  @@unique([companyId,name])
+}
+model AttendanceCredential {
+  id String @id
+  companyId String
+  employeeId String
+  userId String
+  label String
+  publicKey Bytes
+  counter BigInt @default(0)
+  status String @default("PENDING")
+  deviceType String
+  backedUp Boolean
+  createdAt DateTime @default(now())
+  reviewedBy String?
+  employee Employee @relation(fields:[companyId,employeeId],references:[companyId,id],onDelete:Cascade)
+  @@index([companyId,employeeId,status])
+}
+model AttendanceChallenge {
+  id String @id @default(cuid())
+  companyId String
+  employeeId String
+  userId String
+  sessionHash String
+  challenge String
+  purpose String
+  payload Json
+  expiresAt DateTime
+  @@index([expiresAt])
+}
+model AttendanceProof {
+  id String @id @default(cuid())
+  companyId String
+  employeeId String
+  attendanceId String
+  direction String
+  branchId String
+  credentialId String
+  latitude Float
+  longitude Float
+  accuracyMetres Float
+  distanceMetres Float
+  capturedAt DateTime
+  verifiedAt DateTime @default(now())
+  @@index([companyId,employeeId,verifiedAt])
+}

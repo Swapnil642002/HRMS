@@ -1,0 +1,80 @@
+name: daksha-production
+x-app: &app
+  build:
+    context: ..
+  env_file: ../.env.production
+  environment: &app-environment
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    APP_ORIGIN: https://${APP_DOMAIN:?Set APP_DOMAIN}
+    DATABASE_URL: postgresql://daksha:${DB_PASSWORD:?Set DB_PASSWORD}@postgres:5432/daksha
+    REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379
+  restart: unless-stopped
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: daksha
+      POSTGRES_USER: daksha
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    volumes: [database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U daksha -d daksha']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7.2-alpine
+    command: [redis-server, --appendonly, 'yes', --requirepass, '${REDIS_PASSWORD:?Set REDIS_PASSWORD}']
+    volumes: [queue:/data]
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    profiles: [setup]
+    command: [npx, prisma, migrate, deploy]
+    restart: 'no'
+    depends_on:
+      postgres: {condition: service_healthy}
+  bootstrap:
+    <<: *app
+    profiles: [setup]
+    command: [node, --import, tsx, scripts/bootstrap.ts]
+    restart: 'no'
+    depends_on:
+      postgres: {condition: service_healthy}
+  api:
+    <<: *app
+    command: [node, apps/api/dist/main.js]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+  worker:
+    <<: *app
+    command: [node, apps/api/dist/worker.js]
+    depends_on: [api]
+  web:
+    build:
+      context: ..
+    command: [npm, run, start, -w, '@daksha/web']
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
+    depends_on: [api]
+    restart: unless-stopped
+  proxy:
+    image: caddy:2-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+    ports: ['80:80', '443:443', '443:443/udp']
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+      - caddy_config:/config
+    depends_on: [web, api]
+    restart: unless-stopped
+volumes:
+  database:
+  queue:
+  certificates:
+  caddy_config:

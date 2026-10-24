@@ -1,0 +1,5 @@
+import { PrismaClient } from '@prisma/client';
+import { hashPassword } from '../apps/api/src/security';
+const db=new PrismaClient();
+async function main(){const email=process.env.ADMIN_EMAIL?.toLowerCase(),password=process.env.ADMIN_PASSWORD;if(!email||!password||password.length<14)throw Error('Set ADMIN_EMAIL and ADMIN_PASSWORD (at least 14 characters)');if(await db.user.count())throw Error('Bootstrap is disabled once a user exists. Use administration to add members.');await db.$transaction(async tx=>{const user=await tx.user.create({data:{email,name:process.env.ADMIN_NAME||'Administrator',passwordHash:hashPassword(password)}});const company=await tx.company.create({data:{name:process.env.COMPANY_NAME||'Micromap Electronic Systems Limited',memberships:{create:{userId:user.id,role:'ADMIN'}}}});await tx.audit.create({data:{companyId:company.id,actorId:user.id,action:'organization.bootstrapped',entityId:company.id}});});console.log('Organization and administrator created. No sample employee or statutory data was added.');}
+main().finally(()=>db.$disconnect());

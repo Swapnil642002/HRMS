@@ -1,0 +1,53 @@
+name: micromap-daksha
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: daksha
+      POSTGRES_USER: daksha
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    ports: ["127.0.0.1:55433:5432"]
+    volumes: ["database:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U daksha -d daksha"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7.2-alpine
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?Set REDIS_PASSWORD}"]
+    ports: ["127.0.0.1:56379:6379"]
+    volumes: ["queue:/data"]
+  api:
+    profiles: ["app"]
+    build: .
+    command: ["node", "apps/api/dist/main.js"]
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://daksha:${DB_PASSWORD}@postgres:5432/daksha
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    ports: ["127.0.0.1:4000:4000"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_started}
+  worker:
+    profiles: ["app"]
+    build: .
+    command: ["node", "apps/api/dist/worker.js"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://daksha:${DB_PASSWORD}@postgres:5432/daksha
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+    depends_on: [api]
+  web:
+    profiles: ["app"]
+    build: .
+    command: ["npm", "run", "start", "-w", "@daksha/web"]
+    environment:
+      API_INTERNAL_URL: http://api:4000
+    ports: ["127.0.0.1:3000:3000"]
+    depends_on: [api]
+volumes:
+  database:
+  queue:

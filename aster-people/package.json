@@ -1,0 +1,36 @@
+{
+  "name": "micromap-daksha",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w @daksha/api",
+    "dev:web": "npm run dev -w @daksha/web --",
+    "build": "npm run build -w @daksha/api && npm run build -w @daksha/web",
+    "typecheck": "tsc -p apps/api/tsconfig.json --noEmit && tsc -p apps/web/tsconfig.json --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "bootstrap": "node --env-file=.env --import tsx scripts/bootstrap.ts",
+    "licenses": "node scripts/license-inventory.mjs",
+    "db:push": "prisma db push",
+    "dev:worker": "npm run build -w @daksha/api && node --env-file=.env apps/api/dist/worker.js",
+    "test:attendance": "npm run build -w @daksha/api && node --env-file=.env scripts/test-attendance.mjs",
+    "test:requests": "npm run build -w @daksha/api && node --env-file=.env scripts/test-requests.mjs"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3"
+  },
+  "devDependencies": {
+    "prisma": "6.19.3",
+    "typescript": "5.9.3",
+    "tsx": "4.23.15",
+    "@types/node": "24.19.2"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2"
+  }
+}
