@@ -10,7 +10,8 @@ import assert from 'node:assert/strict';
 //   SMOKE_PAYSLIP_LINE_ID=<finalized payroll line id> \
 //   node --import tsx --test tests/smoke.test.ts
 //
-// Refuses to run against the production base URL.
+// Allows only staging hosts. Refuses to run against any other origin,
+// including production (hrms.micromap.in).
 
 const BASE = process.env.SMOKE_BASE_URL;
 const usersRaw = process.env.SMOKE_USERS || '';
@@ -21,10 +22,12 @@ if (!BASE || !usersRaw) {
 } else {
   const BASE_URL = BASE.replace(/\/+$/, '');
   const baseHost = new URL(BASE_URL).hostname;
-  if (baseHost === 'hrms.micromap.in' || baseHost.endsWith('.hrms.micromap.in')) {
+  const stagingOnly =
+    baseHost === 'staging-hrms.micromap.in' || baseHost.endsWith('.staging-hrms.micromap.in');
+  if (!stagingOnly) {
     throw new Error(
-      `Refusing to run smoke tests against production base URL: ${BASE_URL}. ` +
-        'Use the staging origin (staging-hrms.micromap.in) instead.',
+      `Smoke tests are restricted to staging hosts only. Refusing to run against: ${BASE_URL}. ` +
+        'Set SMOKE_BASE_URL=https://staging-hrms.micromap.in.',
     );
   }
   const users = JSON.parse(usersRaw) as Record<string, { email: string; password: string; companyId: string }>;

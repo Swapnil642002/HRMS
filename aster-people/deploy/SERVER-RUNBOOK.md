@@ -548,14 +548,14 @@ Two GitHub Environments are configured in the repository settings:
   the staging secret set (`SMOKE_BASE_URL`, `SMOKE_USERS`, registry credentials).
 - `production` — used by `deploy-production`. **Required reviewers** must be set
   (at least two named reviewers, e.g. a backend engineer and a release manager),
-  and the deployment branch policy must be restricted to
-  `production/backend-hardening` (and `main`). A branch protection rule on
-  `production/backend-hardening` should require status checks (`test`, `build-images`)
-  before merge.
+  and the deployment branch policy must be restricted to `main` (the release
+  branch). `production/backend-hardening` is a pre-release hardening branch and
+  must not be authorized for production deployment. A branch protection rule on
+  `main` should require status checks (`test`, `build-images`) before merge.
 
 ### Verifying the gate really blocks production
 
-1. Push a change to `production/backend-hardening`. The `build-images` job runs, but
+1. Push a change to `main` (the release branch). The `build-images` job runs, but
    `deploy-production` stays in a `pending`/waiting state showing "Waiting for
    approval" until a required reviewer approves the `production` environment.
 2. Confirm no new container is promoted on the production host while pending

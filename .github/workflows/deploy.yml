@@ -45,7 +45,8 @@ jobs:
   build-images:
     name: Build and push immutable images
     needs: test
-    if: github.ref == 'refs/heads/production/backend-hardening'
+    # main is the release branch; only pushes to main build/push images.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       app-digest: ${{ steps.app-build.outputs.digest }}
@@ -94,7 +95,8 @@ jobs:
   deploy-staging:
     name: Deploy to staging (migrations run here first)
     needs: build-images
-    if: github.ref == 'refs/heads/production/backend-hardening'
+    # main is the release branch; self-hosted runner, push-only (never PR/fork).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, hrms-staging, linux]
     environment: staging
     steps:
@@ -140,7 +142,9 @@ jobs:
   deploy-production:
     name: Deploy to production (manual approval gate)
     needs: deploy-staging
-    if: github.ref == 'refs/heads/production/backend-hardening'
+    # main is the release branch; self-hosted runner, push-only (never PR/fork).
+    # Starts only after a required reviewer approves the 'production' GitHub Environment.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, hrms-production, linux]
     environment: production
     steps:
