@@ -1,0 +1,181 @@
+name: Install, test, build immutable images and deploy
+
+on:
+  push:
+    branches: [production/backend-hardening, main]
+  pull_request:
+    branches: [production/backend-hardening, main]
+
+env:
+  REGISTRY: ghcr.io
+  APP_IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ github.event.repository.name }}:runtime
+  TOOLS_IMAGE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ github.event.repository.name }}:tools
+  COMPOSE_FILE: docker-compose.prod.yml
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Install, typecheck, lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up Node.js
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies (clean, offline lockfile)
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit and security tests
+        run: npm test
+      - name: Build application bundles (verifies the release build)
+        run: npm run build
+  build-images:
+    name: Build and push immutable images
+    needs: test
+    if: github.ref == 'refs/heads/production/backend-hardening'
+    runs-on: ubuntu-latest
+    outputs:
+      app-digest: ${{ steps.app-build.outputs.digest }}
+      tools-digest: ${{ steps.tools-build.outputs.digest }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2
+      - name: Log in to the container registry
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.REGISTRY_USER }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      - name: Determine immutable release tag
+        id: tag
+        run: echo "tag=sha-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+      - name: Build and push the tools image (migrations/bootstrap only)
+        id: tools-build
+        uses: docker/build-push-action@67a2d409c0a876cbe6b11854e3e25193efe4e62d
+        with:
+          context: .
+          target: tools
+          push: true
+          tags: ${{ env.TOOLS_IMAGE }}-sha-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Build and push the runtime image (api + web + worker)
+        id: app-build
+        uses: docker/build-push-action@67a2d409c0a876cbe6b11854e3e25193efe4e62d
+        with:
+          context: .
+          target: runtime
+          push: true
+          tags: ${{ env.APP_IMAGE }}-sha-${{ github.sha }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Inspect immutable digests (never `latest`)
+        run: |
+          echo "app-digest=${{ steps.app-build.outputs.digest }}"
+          echo "tools-digest=${{ steps.tools-build.outputs.digest }}"
+
+  deploy-staging:
+    name: Deploy to staging (migrations run here first)
+    needs: build-images
+    if: github.ref == 'refs/heads/production/backend-hardening'
+    runs-on: [self-hosted, hrms-staging, linux]
+    environment: staging
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Set up Node.js (smoke tests)
+        uses: actions/setup-node@0a44ba7841725637a19e28fa30b79a866c81b0a6
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Deploy the pinned image to staging
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+          APP_IMAGE: ${{ needs.build-images.outputs.app-digest }}
+          TOOLS_IMAGE: ${{ needs.build-images.outputs.tools-digest }}
+        run: |
+          set -euo pipefail
+          # Pull the pinned digest using repo secrets (never exposed to forks;
+          # GitHub does not pass secrets to forked PR runs).
+          echo "$REGISTRY_PASSWORD" | sudo docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          # Runtime secrets already live on the host in /etc/hrms/runtime.env
+          # (provisioned by the operator in Step 3; CI never transports them).
+          # Pin the staging-validated immutable digests.
+          sudo sed -i "s#^APP_IMAGE=.*#APP_IMAGE=$APP_IMAGE#; s#^TOOLS_IMAGE=.*#TOOLS_IMAGE=$TOOLS_IMAGE#" /etc/hrms/runtime.env
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-staging -f docker-compose.prod.yml config --quiet
+          # Migrations run on staging BEFORE the new containers are promoted.
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-staging -f docker-compose.prod.yml run --rm migrate npx --no-install prisma migrate deploy
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-staging -f docker-compose.prod.yml pull
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-staging -f docker-compose.prod.yml up -d
+      - name: Run smoke tests against staging
+        env:
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          SMOKE_USERS: ${{ secrets.SMOKE_USERS }}
+          SMOKE_PAYSLIP_LINE_ID: ${{ secrets.SMOKE_PAYSLIP_LINE_ID }}
+        run: |
+          npm ci
+          SMOKE_BASE_URL="$SMOKE_BASE_URL" \
+          SMOKE_USERS="$SMOKE_USERS" \
+          SMOKE_PAYSLIP_LINE_ID="$SMOKE_PAYSLIP_LINE_ID" \
+          node --import tsx --test tests/smoke.test.ts
+
+  deploy-production:
+    name: Deploy to production (manual approval gate)
+    needs: deploy-staging
+    if: github.ref == 'refs/heads/production/backend-hardening'
+    runs-on: [self-hosted, hrms-production, linux]
+    environment: production
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Confirm staging-validated digest
+        run: |
+          echo "Promoting the staging-validated immutable image: ${{ needs.build-images.outputs.app-digest }}"
+          echo "This job only starts after a required reviewer approves the 'production' GitHub Environment."
+      - name: Pre-migration backup and verify
+        env:
+          REGISTRY_USER: ${{ secrets.REGISTRY_USER }}
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$REGISTRY_PASSWORD" | sudo docker login "$REGISTRY" -u "$REGISTRY_USER" --password-stdin
+          # Take an encrypted backup BEFORE migrating production, per Step 3 runbook.
+          sudo /srv/hrms/source/aster-people/deploy/server/backup.sh
+          # Verify the newest snapshot is within the 24-hour RPO.
+          sudo bash -c 'set -a; source /etc/hrms/backup.conf; set +a; restic snapshots --json | jq -e "any(.time > (now - 26*3600 | todate))"'
+      - name: Run production migrations (after verified backup, inside approval gate)
+        env:
+          APP_IMAGE: ${{ needs.build-images.outputs.app-digest }}
+          TOOLS_IMAGE: ${{ needs.build-images.outputs.tools-digest }}
+        run: |
+          set -euo pipefail
+          sudo sed -i "s#^APP_IMAGE=.*#APP_IMAGE=$APP_IMAGE#; s#^TOOLS_IMAGE=.*#TOOLS_IMAGE=$TOOLS_IMAGE#" /etc/hrms/runtime.env
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-production -f docker-compose.prod.yml config --quiet
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-production -f docker-compose.prod.yml run --rm migrate npx --no-install prisma migrate deploy
+      - name: Deploy the pinned image to production
+        env:
+          APP_IMAGE: ${{ needs.build-images.outputs.app-digest }}
+        run: |
+          set -euo pipefail
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-production -f docker-compose.prod.yml pull
+          sudo docker compose --env-file /etc/hrms/runtime.env -p hrms-production -f docker-compose.prod.yml up -d
+          curl -sf https://hrms.micromap.in/health
+
