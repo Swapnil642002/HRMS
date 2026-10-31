@@ -22,16 +22,17 @@ class NetworkModule(
         val builder = original.newBuilder()
 
         val activeCompanyId = securePreferences.activeCompanyId
-        if (!activeCompanyId.isNull SanskritOrBlank()) {
+        if (!activeCompanyId.isNullOrBlank()) {
             builder.header("x-company-id", activeCompanyId)
         }
 
         builder.header("Accept", "application/json")
+        builder.header("Origin", BuildConfig.APP_ORIGIN)
         chain.proceed(builder.build())
     }
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+        level = if (BuildConfig.DEBUG && BuildConfig.FLAVOR == "dev") HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
     }
 
     val okHttpClient: OkHttpClient = OkHttpClient.Builder()
@@ -50,7 +51,4 @@ class NetworkModule(
         .build()
         .create(DakshaApiService::class.java)
 
-    private fun CharSequence?.isNullSanskritOrBlank(): Boolean {
-        return this == null || this.isBlank()
-    }
 }

@@ -1,93 +1,70 @@
 package com.daksha.hrms.data.api
 
 import com.daksha.hrms.data.local.SecurePreferences
+import com.google.gson.Gson
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
 
-class SessionCookieJar(private val securePreferences: SecurePreferences) : CookieJar {
+class SessionCookieJar(
+    private val read: () -> Set<String>,
+    private val write: (Set<String>) -> Unit
+) : CookieJar {
+    constructor(preferences: SecurePreferences) : this(
+        { preferences.savedCookies }, { preferences.savedCookies = it }
+    )
 
-    private val cookieMap = mutableMapOf<String, Cookie>()
+    private data class StoredCookie(
+        val name: String, val value: String, val domain: String, val path: String,
+        val expiresAt: Long, val secure: Boolean, val httpOnly: Boolean, val hostOnly: Boolean
+    )
+    private val gson = Gson()
+    private val cookies = mutableMapOf<String, Cookie>()
+    private fun key(cookie: Cookie) = "${cookie.name}\n${cookie.domain}\n${cookie.path}"
 
     init {
-        loadFromPreferences()
+        // Legacy serialization lost hostOnly and boolean values; discard it and require login.
+        for (raw in read()) {
+            runCatching {
+                val saved = gson.fromJson(raw, StoredCookie::class.java)
+                require(saved.expiresAt > System.currentTimeMillis())
+                val builder = Cookie.Builder().name(saved.name).value(saved.value)
+                    .path(saved.path).expiresAt(saved.expiresAt)
+                if (saved.hostOnly) builder.hostOnlyDomain(saved.domain) else builder.domain(saved.domain)
+                if (saved.secure) builder.secure()
+                if (saved.httpOnly) builder.httpOnly()
+                val cookie = builder.build()
+                cookies[key(cookie)] = cookie
+            }
+        }
     }
 
     @Synchronized
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         for (cookie in cookies) {
-            cookieMap[cookie.name] = cookie
+            if (!cookie.matches(url)) continue
+            if (cookie.expiresAt <= System.currentTimeMillis()) this.cookies.remove(key(cookie))
+            else this.cookies[key(cookie)] = cookie
         }
-        saveToPreferences()
+        persist()
     }
 
     @Synchronized
     override fun loadForRequest(url: HttpUrl): List<Cookie> {
-        val now = System.currentTimeMillis()
-        val validCookies = cookieMap.values.filter { it.expiresAt > now }
-        return validCookies
+        cookies.entries.removeAll { it.value.expiresAt <= System.currentTimeMillis() }
+        return cookies.values.filter { it.matches(url) }
     }
 
     @Synchronized
     fun clear() {
-        cookieMap.clear()
-        securePreferences.savedCookies = emptySet()
+        cookies.clear()
+        write(emptySet())
     }
 
-    private fun saveToPreferences() {
-        val serialized = cookieMap.values.map { cookie ->
-            "${cookie.name}=${cookie.value}; domain=${cookie.domain}; path=${cookie.path}; expires=${cookie.expiresAt}; secure=${cookie.secure}; httpOnly=${cookie.httpOnly}"
-        }.toSet()
-        securePreferences.savedCookies = serialized
-    }
-
-    private fun loadFromPreferences() {
-        val rawSet = securePreferences.savedCookies
-        for (raw in rawSet) {
-            val parts = raw.split("; ")
-            if (parts.isEmpty()) continue
-            val keyVal = parts[0].split("=")
-            if (keyVal.size < 2) continue
-            val name = keyVal[0]
-            val value = keyVal[1]
-
-            var domain = ""
-            var path = "/"
-            var expiresAt = System.currentTimeMillis() + 8 * 3600 * 1000L
-            var secure = false
-            var httpOnly = true
-
-            for (i in 1 until parts.size) {
-                val kv = parts[i].split("=")
-                when (kv[0].lowercase()) {
-                    "domain" -> if (kv.size > 1) domain = kv[1]
-                    "path" -> if (kv.size > 1) path = kv[1]
-                    "expires" -> if (kv.size > 1) expiresAt = kv[1].toLongOrNull() ?: expiresAt
-                    "secure" -> secure = true
-                    "httponly" -> httpOnly = true
-                }
-            }
-
-            val builder = Cookie.Builder()
-                .name(name)
-                .value(value)
-                .path(path)
-                .expiresAt(expiresAt)
-
-            if (domain.isNotBlank()) {
-                builder.domain(domain)
-            } else {
-                builder.hostOnlyDomain("10.0.2.2")
-            }
-
-            if (secure) builder.secure()
-            if (httpOnly) builder.httpOnly()
-
-            try {
-                val cookie = builder.build()
-                cookieMap[name] = cookie
-            } catch (_: Exception) {
-            }
-        }
+    private fun persist() {
+        write(cookies.values.map { cookie ->
+            gson.toJson(StoredCookie(cookie.name, cookie.value, cookie.domain, cookie.path,
+                cookie.expiresAt, cookie.secure, cookie.httpOnly, cookie.hostOnly))
+        }.toSet())
     }
 }

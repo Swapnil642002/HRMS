@@ -2,6 +2,7 @@ package com.daksha.hrms.data.repository
 
 import com.daksha.hrms.data.api.DakshaApiService
 import com.daksha.hrms.data.api.SessionCookieJar
+import com.daksha.hrms.data.api.loginRateLimitMessage
 import com.daksha.hrms.data.api.models.*
 import com.daksha.hrms.data.local.SecurePreferences
 
@@ -18,6 +19,8 @@ class AuthRepository(
                 securePreferences.userEmail = email
                 Result.success(true)
             } else {
+                val rateLimit = loginRateLimitMessage(response.code(), response.headers()["Retry-After"])
+                if (rateLimit != null) return Result.failure(Exception(rateLimit))
                 val errorMsg = response.errorBody()?.string() ?: "Invalid login credentials"
                 Result.failure(Exception(extractErrorMessage(errorMsg)))
             }

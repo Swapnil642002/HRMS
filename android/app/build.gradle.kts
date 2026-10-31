@@ -27,12 +27,25 @@ android {
             dimension = "environment"
             applicationIdSuffix = ".dev"
             versionNameSuffix = "-dev"
-            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000/\"")
+            buildConfigField("String", "BASE_URL", "\"http://10.0.2.2:3000/api/\"")
+            buildConfigField("String", "APP_ORIGIN", "\"http://localhost:3000\"")
+            manifestPlaceholders["cleartextAllowed"] = "true"
             buildConfigField("String", "ENV_NAME", "\"Development\"")
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            buildConfigField("String", "BASE_URL", "\"https://staging-hrms.micromap.in/api/\"")
+            buildConfigField("String", "APP_ORIGIN", "\"https://staging-hrms.micromap.in\"")
+            buildConfigField("String", "ENV_NAME", "\"Staging\"")
+            manifestPlaceholders["cleartextAllowed"] = "false"
         }
         create("prod") {
             dimension = "environment"
-            buildConfigField("String", "BASE_URL", "\"https://hrms.micromap.in/\"")
+            buildConfigField("String", "BASE_URL", "\"https://hrms.micromap.in/api/\"")
+            buildConfigField("String", "APP_ORIGIN", "\"https://hrms.micromap.in\"")
+            manifestPlaceholders["cleartextAllowed"] = "false"
             buildConfigField("String", "ENV_NAME", "\"Production\"")
         }
     }
