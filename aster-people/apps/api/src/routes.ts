@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Req, Res, UseGuards, UnauthorizedException, BadRequestException, ConflictException, NotFoundException, ForbiddenException, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Req, Res, UseGuards, UnauthorizedException, BadRequestException, ConflictException, NotFoundException, ForbiddenException, ServiceUnavailableException, HttpException, OnModuleDestroy } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -17,23 +17,24 @@ const serial={isolationLevel:Prisma.TransactionIsolationLevel.Serializable};
 const today=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Kolkata',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const cents=(n:number)=>`INR ${(n/100).toFixed(2)}`;
 @Controller()
-export class AuthController {
- private redis=new Redis(process.env.REDIS_URL||'redis://localhost:6379',{lazyConnect:true,maxRetriesPerRequest:1});
+export class AuthController implements OnModuleDestroy {
+ private redis=new Redis(process.env.REDIS_URL!,{lazyConnect:true,maxRetriesPerRequest:1});
  constructor(private db:Db){}
- @Get('health')async health(){await this.db.$queryRaw`SELECT 1`;return {status:'ok'};}
+ onModuleDestroy(){this.redis.disconnect();}
+ @Get(['health','api/health'])async health(){await this.db.$queryRaw`SELECT 1`;return {status:'ok'};}
  @Post('auth/login')async login(@Body()body:unknown,@Req()req:Request,@Res({passthrough:true})res:Response){
   const b=z.object({email:z.email().transform(s=>s.toLowerCase()),password:z.string().min(1).max(256)}).parse(body);
-  for(const key of [`login:ip:${req.ip}`,`login:email:${digest(b.email)}`]){const count=await this.redis.incr(key);if(count===1)await this.redis.expire(key,900);if(count>20)throw new HttpLimit();}
+  for(const key of [`login:ip:${req.ip}`,`login:email:${digest(b.email)}`]){const count=Number(await this.redis.eval("local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],900) end; return n",1,key));if(count>20)throw new HttpLimit();}
   const user=await this.db.user.findUnique({where:{email:b.email}});
   const dummy='0123456789abcdef0123456789abcdef:'+ '00'.repeat(64);
   const valid=verifyPassword(b.password,user?.passwordHash??dummy);if(!user?.active||!user.passwordSet||!valid)throw new UnauthorizedException('Email or password is incorrect');
   const token=randomBytes(32).toString('hex');await this.db.session.create({data:{id:digest(token),userId:user.id,expiresAt:new Date(Date.now()+8*3600000)}});
   res.cookie(cookieName,token,{httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict',path:'/',maxAge:8*3600000});return {ok:true};
  }
- @Post('auth/logout')async logout(@Req()req:Request,@Res({passthrough:true})res:Response){const token=tokenFromCookie(req.headers.cookie);if(token)await this.db.session.deleteMany({where:{id:digest(token)}});res.clearCookie(cookieName,{path:'/'});return {ok:true};}
+ @Post('auth/logout')async logout(@Req()req:Request,@Res({passthrough:true})res:Response){const token=tokenFromCookie(req.headers.cookie);if(token)await this.db.session.deleteMany({where:{id:digest(token)}});res.clearCookie(cookieName,{path:'/',httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict'});return {ok:true};}
  @Get('auth/me')async me(@Req()req:Request){const token=tokenFromCookie(req.headers.cookie);if(!token)throw new UnauthorizedException();const s=await this.db.session.findUnique({where:{id:digest(token)},include:{user:{include:{memberships:{include:{company:true,employee:{select:{id:true}}}}}}}});if(!s||s.expiresAt<new Date()||!s.user.active)throw new UnauthorizedException();return {id:s.user.id,name:s.user.name,email:s.user.email,memberships:s.user.memberships.map(m=>({company:m.company,role:m.role,employeeId:m.employee?.id}))};}
 }
-class HttpLimit extends ForbiddenException{constructor(){super('Too many login attempts. Try again in 15 minutes.');}}
+class HttpLimit extends HttpException{constructor(){super('Too many login attempts. Try again in 15 minutes.',429);}}
 @Controller()
 @UseGuards(AuthGuard)
 export class PeopleController {
