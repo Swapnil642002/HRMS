@@ -13,14 +13,39 @@ Legacy cookie serialization is discarded, so existing users must sign in again.
 Production/staging disable cleartext traffic and HTTP body logging. Business
 rules, roles and attendance verification have not changed.
 
-Validation performed with local Gradle 8.12, JDK 17 and Android SDK 35:
+Validation performed with local Gradle 8.12, JDK 17 and Android SDK 36:
 
 ```bash
-gradle --no-daemon :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:compileProdReleaseKotlin
+./gradlew --no-daemon :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:compileProdReleaseKotlin
 ```
 
-Four unit tests pass; staging APK builds and production Kotlin compiles. No app
-was launched against staging or production. The repository's pre-existing Gradle
-wrapper fails with missing org/gradle/wrapper/IDownload; use an installed Gradle
-8.12 until the wrapper is separately repaired. Release signing and end-to-end
-API smoke testing remain outside this preparation step.
+The wrapper is regenerated from Gradle 8.12 with the official distribution SHA-256
+checksum. JAVA_HOME must point to JDK 17 (no machine-specific fallback remains).
+The app now compiles/targets SDK 36 with AGP 8.10.1. Edge-to-edge uses Activity's
+supported API, Scaffold safe-drawing insets are consumed before keyboard padding,
+and logout clears the actual navigation graph. Predictive back uses Navigation
+Compose and the platform dispatcher, with no deprecated onBackPressed override.
+
+Before release, verify on an API 36 emulator/device using staging/test accounts:
+- Gesture and three-button navigation, portrait/landscape and display cutouts.
+- Login/recovery forms with keyboard open: inputs and submit buttons remain visible.
+- Back from recovery returns to login; back from profile returns to its prior screen.
+- Cancel a predictive back gesture: remain on the current screen.
+- Complete back from the dashboard: leave the app, without reopening login underneath.
+- Logout then Back never exposes the previous authenticated screen.
+- Light/dark themes keep system-bar icons readable.
+
+No device UI/gesture test or API call is implied by compilation and JVM tests.
+Release signing and end-to-end API smoke testing remain outside this preparation.
+
+Validation output, 2026-10-31 (regenerated wrapper):
+
+```text
+./gradlew --no-daemon :app:testStagingDebugUnitTest :app:assembleStagingDebug :app:compileProdReleaseKotlin :app:lintStagingDebug
+BUILD SUCCESSFUL in 34s
+68 actionable tasks: 16 executed, 52 up-to-date
+NetworkSecurityTest: 4 tests, 0 failures, 0 errors
+```
+
+Lint passes with existing warnings; no baseline or suppression was added. Camera
+hardware is explicitly optional to satisfy the SDK migration's manifest check.

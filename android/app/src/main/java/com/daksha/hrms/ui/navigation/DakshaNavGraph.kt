@@ -1,6 +1,16 @@
 package com.daksha.hrms.ui.navigation
 
+import android.app.Activity
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.material3.MaterialTheme
+import com.daksha.hrms.ui.theme.Slate900
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -63,7 +73,18 @@ fun DakshaNavGraph(
 
     val isAuthRoute = currentRoute in listOf("login", "request_access", "forgot_password")
 
+    val view = LocalView.current
+    val darkTheme = isSystemInDarkTheme()
+    if (!view.isInEditMode) {
+        SideEffect {
+            WindowCompat.getInsetsController((view.context as Activity).window, view)
+                .isAppearanceLightNavigationBars = !isAuthRoute && !darkTheme
+        }
+    }
+
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing,
+        containerColor = if (isAuthRoute) Slate900 else MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (!isAuthRoute) {
@@ -75,7 +96,8 @@ fun DakshaNavGraph(
                     onSignOut = {
                         mainViewModel.signOut {
                             navController.navigate("login") {
-                                popUpTo(0) { inclusive = true }
+                                popUpTo(navController.graph.id) { inclusive = true }
+                                launchSingleTop = true
                             }
                         }
                     }
@@ -103,7 +125,7 @@ fun DakshaNavGraph(
         NavHost(
             navController = navController,
             startDestination = "login",
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding).imePadding()
         ) {
             composable("login") {
                 LoginScreen(
