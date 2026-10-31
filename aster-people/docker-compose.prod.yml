@@ -1,0 +1,148 @@
+# One environment per host. Use a distinct project, subnet and secrets for staging.
+x-runtime: &runtime
+  image: ${APP_IMAGE:?Set an immutable APP_IMAGE tag or digest}
+  build:
+    context: .
+    target: runtime
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  logging:
+    driver: json-file
+    options: {max-size: '10m', max-file: '5'}
+x-backend-env: &backend-env
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  PORT: '4000'
+  APP_ORIGIN: https://${APP_DOMAIN:?Set APP_DOMAIN}
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL with postgres service hostname}
+  REDIS_URL: ${REDIS_URL:?Set REDIS_URL with redis service hostname}
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:?Set DB_NAME}
+      POSTGRES_USER: ${DB_USER:?Set DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+    volumes: [database:/var/lib/postgresql/data]
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: '10m', max-file: '5'}}
+  redis:
+    image: redis:7.2-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+    # Generate private configuration without embedding the password in process arguments.
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - 'umask 077; printf "appendonly yes\nrequirepass %s\n" "$$REDIS_PASSWORD" > /tmp/redis.conf; exec docker-entrypoint.sh redis-server /tmp/redis.conf'
+    volumes: [queue:/data]
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: '10m', max-file: '5'}}
+  api:
+    <<: *runtime
+    environment:
+      <<: *backend-env
+      TRUST_PROXY: ${CADDY_IP:?Set CADDY_IP within EDGE_SUBNET}
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+    networks: [edge, data]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+  worker:
+    <<: *runtime
+    command: [node, apps/api/dist/worker.js]
+    environment:
+      <<: *backend-env
+      SMTP_HOST: ${SMTP_HOST:?Set SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?Set MAIL_FROM}
+      MAIL_MESSAGE_DOMAIN: ${MAIL_MESSAGE_DOMAIN:?Set MAIL_MESSAGE_DOMAIN}
+    networks: [data, outbound]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+  web:
+    <<: *runtime
+    command: [node, node_modules/next/dist/bin/next, start, apps/web, --hostname, 0.0.0.0]
+    environment:
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:4000
+    networks: [edge]
+    depends_on:
+      api: {condition: service_healthy}
+  migrate:
+    image: ${TOOLS_IMAGE:?Set an immutable TOOLS_IMAGE tag or digest}
+    build: {context: ., target: tools}
+    profiles: [tools]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+    networks: [data]
+    command: [npx, --no-install, prisma, migrate, deploy]
+    restart: 'no'
+    depends_on:
+      postgres: {condition: service_healthy}
+  bootstrap:
+    image: ${TOOLS_IMAGE:?Set TOOLS_IMAGE}
+    profiles: [tools]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL}
+    networks: [data]
+    command: [node, --import, tsx, scripts/bootstrap.ts]
+    restart: 'no'
+    depends_on:
+      postgres: {condition: service_healthy}
+  caddy:
+    image: caddy:2-alpine
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?Set APP_DOMAIN}
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - certificates:/data
+      - caddy_config:/config
+    networks:
+      edge:
+        ipv4_address: ${CADDY_IP:?Set CADDY_IP}
+    depends_on: [web, api]
+    restart: unless-stopped
+    logging: {driver: json-file, options: {max-size: '10m', max-file: '5'}}
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:?Set a non-overlapping EDGE_SUBNET}
+  data:
+    internal: true
+  outbound: {}
+volumes:
+  database:
+  queue:
+  certificates:
+  caddy_config:
