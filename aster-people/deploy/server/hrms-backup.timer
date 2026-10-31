@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily HRMS backup at 02:15 UTC
+
+[Timer]
+OnCalendar=*-*-* 02:15:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=hrms-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+# Root-owned, mode 0600. Shell assignments; no spaces around '='.
+APP_DIR=/srv/hrms/source/aster-people
+APP_ENV_FILE=/etc/hrms/runtime.env
+COMPOSE_PROJECT=hrms-staging
+RESTIC_REPOSITORY=/var/backups/hrms-restic
+RESTIC_PASSWORD_FILE=/etc/hrms/restic-local.key
+RESTIC_REMOTE_REPOSITORY=sftp:hrms-backup:/backups/hrms-staging
+RESTIC_REMOTE_PASSWORD_FILE=/etc/hrms/restic-remote.key
+# Replace with the exact approved PostgreSQL 17 image digest used for the release.
+RESTORE_POSTGRES_IMAGE=
+BACKUP_TMPFS_SIZE=2G
+RESTORE_TMPFS_SIZE=4G
