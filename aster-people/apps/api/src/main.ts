@@ -3,7 +3,9 @@ import { Module, Catch, ArgumentsHost, ExceptionFilter, HttpException } from '@n
 import { NestFactory } from '@nestjs/core';
 import { Prisma } from '@prisma/client';
 import { ZodError } from 'zod';
-import helmet from 'helmet';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { validateEnv, checkRedis } from './config';
+import { configureHttp } from './http-config';
 import { AttendanceController } from './attendance';
 import { AccountsController } from './accounts';
 import { Db } from './db';
@@ -18,10 +20,13 @@ class Errors implements ExceptionFilter {catch(e:unknown,host:ArgumentsHost){
  console.error(e);res.status(500).json({message:'Unable to complete this operation.'});
 }}
 @Module({providers:[Db,AuthGuard],controllers:[AttendanceController,AccountsController,AuthController,PeopleController,WorkflowController,PayrollController,TalentController,IntegrationController]})class App{}
-async function main(){
- if(!process.env.APP_ORIGIN)throw Error('APP_ORIGIN is required');
- const app=await NestFactory.create(App,{rawBody:true});app.setGlobalPrefix('api');app.use(helmet());
- app.use((req:any,res:any,next:()=>void)=>{if(!['GET','HEAD','OPTIONS'].includes(req.method)&&!req.path.startsWith('/api/biometric/')){if(req.headers.origin!==process.env.APP_ORIGIN)return res.status(403).json({message:'Invalid request origin'});}next();});
- app.useGlobalFilters(new Errors());app.enableShutdownHooks();await app.listen(Number(process.env.PORT||4000),process.env.HOST||'127.0.0.1');
+export async function createApp(database?: Db) {
+ const module = database ? {module:App, providers:[{provide:Db,useValue:database}]} : App;
+ const app=await NestFactory.create<NestExpressApplication>(module,{rawBody:true,logger:false});
+ configureHttp(app);app.useGlobalFilters(new Errors());app.enableShutdownHooks();return app;
 }
-void main();
+async function main(){
+ validateEnv(); await checkRedis();
+ const app=await createApp();await app.listen(Number(process.env.PORT||4000),process.env.HOST||'127.0.0.1');
+}
+if (require.main === module) void main().catch(() => {console.error('API startup failed; verify configuration and dependency availability');process.exitCode=1;});

@@ -24,7 +24,7 @@ async function passwordEmail(tx:Prisma.TransactionClient,user:{id:string;email:s
 
 @Controller()
 export class AccountsController implements OnModuleDestroy {
-  private redis=new Redis(process.env.REDIS_URL||'redis://localhost:6379',{lazyConnect:true,maxRetriesPerRequest:1});
+  private redis=new Redis(process.env.REDIS_URL!,{lazyConnect:true,maxRetriesPerRequest:1});
   constructor(private db:Db){}
   onModuleDestroy(){this.redis.disconnect();}
   private async limit(req:Request,action:string,email?:string){
@@ -61,7 +61,7 @@ export class AccountsController implements OnModuleDestroy {
       await tx.passwordToken.updateMany({where:{userId:token.userId,usedAt:null},data:{usedAt:new Date()}});
       await tx.session.deleteMany({where:{userId:token.userId}});
     },serial);
-    res.clearCookie(cookieName,{path:'/'});return {message:'Your password has been saved. Sign in with your new password.'};
+    res.clearCookie(cookieName,{path:'/',httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict'});return {message:'Your password has been saved. Sign in with your new password.'};
   }
   @Post('auth/change-password')
   async change(@Body()body:unknown,@Req()req:Request,@Res({passthrough:true})res:Response){
@@ -77,7 +77,7 @@ export class AccountsController implements OnModuleDestroy {
       await tx.passwordToken.updateMany({where:{userId:session.userId,usedAt:null},data:{usedAt:new Date()}});
       await tx.session.deleteMany({where:{userId:session.userId}});
     },serial);
-    res.clearCookie(cookieName,{path:'/'});return {message:'Password changed. Sign in again on each device.'};
+    res.clearCookie(cookieName,{path:'/',httpOnly:true,secure:process.env.NODE_ENV==='production',sameSite:'strict'});return {message:'Password changed. Sign in again on each device.'};
   }
   @UseGuards(AuthGuard) @Get('access-requests')
   async requests(@Req()req:AuthRequest){

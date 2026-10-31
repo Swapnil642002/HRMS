@@ -16,10 +16,11 @@
     "db:migrate": "prisma migrate deploy",
     "bootstrap": "node --env-file=.env --import tsx scripts/bootstrap.ts",
     "licenses": "node scripts/license-inventory.mjs",
-    "db:push": "prisma db push",
+    "db:push": "node scripts/db-push.mjs",
     "dev:worker": "npm run build -w @daksha/api && node --env-file=.env apps/api/dist/worker.js",
     "test:attendance": "npm run build -w @daksha/api && node --env-file=.env scripts/test-attendance.mjs",
-    "test:requests": "npm run build -w @daksha/api && node --env-file=.env scripts/test-requests.mjs"
+    "test:requests": "npm run build -w @daksha/api && node --env-file=.env scripts/test-requests.mjs",
+    "test:security": "npm run build -w @daksha/api && node --test tests/security-http.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"
