@@ -546,23 +546,24 @@ Two GitHub Environments are configured in the repository settings:
 
 - `staging` — used by `deploy-staging`. No required reviewers by default; protects
   the staging secret set (`SMOKE_BASE_URL`, `SMOKE_USERS`, registry credentials).
-- `production` — used by `deploy-production`. **Required reviewers** must be set
-  (at least two named reviewers, e.g. a backend engineer and a release manager),
-  and the deployment branch policy must be restricted to `main` (the release
-  branch). `production/backend-hardening` is a pre-release hardening branch and
-  must not be authorized for production deployment. A branch protection rule on
-  `main` should require status checks (`test`, `build-images`) before merge.
+- `production` — used by `deploy-production`. **One required reviewer** must be set
+  (solo maintainer: self-review is allowed — the maintainer may approve their own
+  production deployment), and the deployment branch policy must be restricted to
+  `main` (the release branch). `production/backend-hardening` is a pre-release
+  hardening branch and must not be authorized for production deployment. A branch
+  protection rule on `main` should require status checks (`test`, `build-images`)
+  before merge.
 
-### Verifying the gate really blocks production
+### Verifying the gate really blocks production (gate test)
 
 1. Push a change to `main` (the release branch). The `build-images` job runs, but
    `deploy-production` stays in a `pending`/waiting state showing "Waiting for
-   approval" until a required reviewer approves the `production` environment.
+   approval" until the required reviewer approves the `production` environment.
 2. Confirm no new container is promoted on the production host while pending
    (`docker compose -p hrms-production ps` shows the previous image/digest).
 3. Have an unauthorized actor (or a forked PR) attempt a production deploy — secrets
-   are not available to forked PR runs, and the environment approval is still
-   required; the job must not start.
+   are not available to forked PR runs, `vars.DEPLOY_ENABLED` defaults off, and the
+   environment approval is still required; the job must not start.
 4. Approve in the GitHub UI → `deploy-production` runs the pre-migration backup,
    verifies it, runs migrations, then deploys the pinned digest.
 

@@ -14,7 +14,6 @@ env:
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: production-deploy
@@ -46,8 +45,10 @@ jobs:
     name: Build and push immutable images
     needs: test
     # main is the release branch; only pushes to main build/push images.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      packages: write   # only this job pushes images to the container registry
     outputs:
       app-digest: ${{ steps.app-build.outputs.digest }}
       tools-digest: ${{ steps.tools-build.outputs.digest }}
@@ -96,7 +97,7 @@ jobs:
     name: Deploy to staging (migrations run here first)
     needs: build-images
     # main is the release branch; self-hosted runner, push-only (never PR/fork).
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: [self-hosted, hrms-staging, linux]
     environment: staging
     steps:
@@ -144,7 +145,7 @@ jobs:
     needs: deploy-staging
     # main is the release branch; self-hosted runner, push-only (never PR/fork).
     # Starts only after a required reviewer approves the 'production' GitHub Environment.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.DEPLOY_ENABLED == 'true'
     runs-on: [self-hosted, hrms-production, linux]
     environment: production
     steps:
