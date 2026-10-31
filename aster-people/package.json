@@ -20,7 +20,8 @@
     "dev:worker": "npm run build -w @daksha/api && node --env-file=.env apps/api/dist/worker.js",
     "test:attendance": "npm run build -w @daksha/api && node --env-file=.env scripts/test-attendance.mjs",
     "test:requests": "npm run build -w @daksha/api && node --env-file=.env scripts/test-requests.mjs",
-    "test:security": "npm run build -w @daksha/api && node --test tests/security-http.test.cjs"
+    "test:security": "npm run build -w @daksha/api && node --test tests/security-http.test.cjs",
+    "test:uploads": "npm run build -w @daksha/api && node --test tests/uploads.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.3"
@@ -32,6 +33,7 @@
     "@types/node": "24.19.2"
   },
   "overrides": {
-    "deepmerge-ts": "8.0.2"
+    "deepmerge-ts": "8.0.2",
+    "multer": "2.5.0"
   }
 }
