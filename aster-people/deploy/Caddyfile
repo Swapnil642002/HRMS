@@ -12,14 +12,25 @@
     }
     @api path /api /api/* /health
     handle @api {
-        header Cache-Control "no-store"
+        # Authenticated API responses are never cached by any cache.
+        header >Cache-Control "private, no-store, max-age=0"
         reverse_proxy api:4000 {
             # Caddy is the public edge; never pass client-supplied forwarding IPs.
             header_up X-Forwarded-For {remote_host}
             header_up X-Forwarded-Proto {scheme}
         }
     }
+    handle /_next/static/* {
+        # Next serves content-hashed build assets: cache them long-term and treat
+        # them as immutable. A missing asset is forwarded to web, so a 404 is not
+        # cached for a year (Cache-Control is set by Next; this header only adds
+        # cacheability for successful responses).
+        header Cache-Control "public, max-age=31536000, immutable"
+        reverse_proxy web:3000
+    }
     handle {
+        # HTML/account pages must pick up a new release immediately.
+        header >Cache-Control "private, no-store, max-age=0"
         reverse_proxy web:3000
     }
 }
